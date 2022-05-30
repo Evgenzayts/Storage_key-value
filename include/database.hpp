@@ -71,4 +71,3 @@ class My_BD {
 };
 
 #endif //INCLUDE_DATABASE_HPP_
-
