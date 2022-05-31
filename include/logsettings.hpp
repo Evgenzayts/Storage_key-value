@@ -10,8 +10,8 @@
 #include <boost/log/utility/setup/console.hpp>
 #include <boost/log/utility/setup/file.hpp>
 
-boost::log::trivial::severity_level choose_level(
-    const std::string& lev);
-void logs(const std::string& lev);
+boost::log::trivial::severity_level Choose_level(const std::string& lvl);
+
+void Logs(const std::string& lvl);
 
 #endif  // INCLUDE_LOGSETTINGS_HPP_

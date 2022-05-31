@@ -48,7 +48,12 @@ find_package(Boost CONFIG REQUIRED
 
 add_library(${PROJECT_NAME} STATIC
         ${CMAKE_CURRENT_SOURCE_DIR}/sources/database.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/sources/logsettings.cpp sources/database.cpp sources/logsettings.cpp include/database.hpp include/logsettings.hpp include/queue.hpp)
+        ${CMAKE_CURRENT_SOURCE_DIR}/sources/logsettings.cpp
+        sources/database.cpp
+        sources/logsettings.cpp
+        include/database.hpp
+        include/logsettings.hpp
+        include/queue.hpp)
 
 add_executable(demo
         ${CMAKE_CURRENT_SOURCE_DIR}/demo/main.cpp

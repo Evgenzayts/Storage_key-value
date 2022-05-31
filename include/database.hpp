@@ -20,54 +20,53 @@
 #include <database.hpp>
 
 //создаём первоначальную БД
-void make_inp_BD(const std::string& directory);
+void Create_DB(const std::string& directory);
 
-std::string calc_hash(const std::string& key, const std::string& value);
+std::string Get_hash(const std::string& key, const std::string& value);
 
 //запись таблицы (БД)
-struct Entry{
-  size_t Handle; //дескриптор
-  std::string Key; //ключ
-  std::string Value; //значение
+struct Input {
+  size_t handle; //дескриптор
+  std::string key; //ключ
+  std::string value; //значение
 };
 
 
-class My_BD {
+class Database {
  public:
-  My_BD(std::string& input_filename, std::string& output_filename,
-        size_t number_of_threads);
-  ~My_BD();
-  void write_val_to_BD(Entry&& KeyHash);
-  void parse_inp_BD();
-  void make_cons_queue(Entry& en);
-  void write_new_BD();
+  Database(std::string& input_filename, std::string& output_filename, size_t number_of_threads);
+
+  ~Database();
+
+  void write_val_to_db(Input&& KeyHash);
+  void parse_input_db();
+  void make_cons_queue(Input& input);
+  void write_new_db();
   void start_process();
   void make_cons_pool();
 
  private:
-  //отвечаем за парсинг начальной БД
-  bool ParseFlag_ = false;
-  //отвечаетуспех вычисления хешей
-  bool HashFlag_ = false;
-  //отвечает за запись новых пар ключ-значение в новую БД
-  bool WriteFlag_ = false;
+  bool _parse_flag = false;   //отвечаем за парсинг начальной БД
+  bool _hash_flag = false;     //отвечает за успех вычисления хешей
+  bool _write_flag = false;    //отвечает за запись новых пар ключ-значение в новую БД
 
-  Queue<Entry> ProdQueue_;
-  Queue<Entry> ConsQueue_;
+  Queue<Input> _prod_queue;
+  Queue<Input> _cons_queue;
 
-  std::string input_; //файл с начальной БД
-  std::string output_; //файл с конечной БД
+  std::string _input;   //файл с начальной БД
+  std::string _output;  //файл с конечной БД
 
-  //Семейства столбцов обрабатываются и ссылаются
+  // Семейства столбцов обрабатываются и ссылаются
   // с помощью  ColumnFamilyHandle
-  std::vector<rocksdb::ColumnFamilyHandle*> fromHandles_;//начальная БД
-  std::vector<rocksdb::ColumnFamilyHandle*> outHandles_;// конечная
+  std::vector<rocksdb::ColumnFamilyHandle*> _inp_handles;   //начальная БД
+  std::vector<rocksdb::ColumnFamilyHandle*> _out_handles;    // конечная
 
   //начальная и конечная БД
-  rocksdb::DB* inpBD_ = nullptr;
-  rocksdb::DB* outputBD_ = nullptr;
+  rocksdb::DB* _input_DB = nullptr;
+  rocksdb::DB* _output_DB = nullptr;
+
   //пул потоков
-  ThreadPool pool_;
+  ThreadPool _pool;
 };
 
 #endif //INCLUDE_DATABASE_HPP_

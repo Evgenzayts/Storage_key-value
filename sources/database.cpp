@@ -4,7 +4,7 @@
 #include <iostream>
 
 // СОЗДАНИЕ БД (принимает путь до файла)
-void make_inp_BD(const std::string& directory) {
+void Create_DB(const std::string& directory) {
   //5 значений в каждом из 3-х семейств
   const unsigned int NUMBER_OF_COLUMNS = 3;
   const unsigned int NUMBER_OF_VALUES = 5;
@@ -13,40 +13,40 @@ void make_inp_BD(const std::string& directory) {
     //  СОЗДАЁМ И ОТКРЫВАЕМ БАЗУ ДАННЫХ
     // переменная для опций
     rocksdb::Options options;
-    // "создать БД, если она не существует"
-    options.create_if_missing = true;
-    // db - private член класса -
-    // переменная для БД
-    rocksdb::DB* db = nullptr;
-    // открываем/создаем БД
-    rocksdb::Status status = rocksdb::DB::Open(options, directory, &db);
+    options.create_if_missing = true;   // "создать БД, если она не существует"
+    rocksdb::DB* db = nullptr;    // db - private член класса - переменная для БД
+    rocksdb::Status status = rocksdb::DB::Open(options, directory, &db);    // открываем/создаем БД
 
-    if (!status.ok()) throw std::runtime_error{"DB::Open failed"};
+    if (!status.ok())
+        throw std::runtime_error{"DB::Open failed"};
 
-    //    ЗАДАЁМ СЕМЕЙСТВА СТОЛБЦОВ (ColumnFamilies) в БД
-    std::vector<std::string> column_family;
-
-    // задаём размер вектора
-    column_family.reserve(NUMBER_OF_COLUMNS);
+    std::vector<std::string> column_family; // ЗАДАЁМ СЕМЕЙСТВА СТОЛБЦОВ (ColumnFamilies) в БД
+    column_family.reserve(NUMBER_OF_COLUMNS);    // задаём размер вектора
     //заполняем вектор семействами столбцов
-    for (unsigned int i = 0; i < NUMBER_OF_COLUMNS; ++i) {
+    for (size_t i = 0; i < NUMBER_OF_COLUMNS; ++i) {
       column_family.emplace_back("ColumnFamily_" + std::to_string(i + 1));
     }
 
     std::vector<rocksdb::ColumnFamilyHandle*> handles;
     status = db->CreateColumnFamilies(rocksdb::ColumnFamilyOptions(),
-                                      column_family, &handles);
-    if (!status.ok()) throw std::runtime_error{"CreateColumnFamilies failed"};
+                                      column_family,
+                                      &handles);
+
+    if (!status.ok())
+        throw std::runtime_error{"CreateColumnFamilies failed"};
 
     //   ЗАПОЛЯЕМ БД СЛУЧАЙНЫМИ ЗНАЧЕНИЯМИ
     std::string key;
     std::string value;
-    for (unsigned int i = 0; i < NUMBER_OF_COLUMNS; ++i) {
-      for (unsigned int j = 0; j < NUMBER_OF_VALUES; ++j) {
+    for (size_t i = 0; i < NUMBER_OF_COLUMNS; ++i) {
+      for (size_t j = 0; j < NUMBER_OF_VALUES; ++j) {
         key = "key-" + std::to_string((i * NUMBER_OF_VALUES) + j);
         value = "value-" + std::to_string(std::rand() % 100);
-        status = db->Put(rocksdb::WriteOptions(), handles[i],
-                         rocksdb::Slice(key), rocksdb::Slice(value));
+        status = db->Put(rocksdb::WriteOptions(),
+                         handles[i],
+                         rocksdb::Slice(key),
+                         rocksdb::Slice(value));
+
         if (!status.ok())
           throw std::runtime_error{"Putting [" + std::to_string(i + 1) + "][" +
                                    std::to_string(j) + "] failed"};
@@ -56,12 +56,13 @@ void make_inp_BD(const std::string& directory) {
                                 <<" -- [ FIRST DATA BASE ]";
       }
     }
+
     //Перед удалением базы данных нужно закрыть
     //все семейства столбцов,
     //вызвав DestroyColumnFamilyHandle() со всеми дескрипторами.
     // закрываем БД
-    for (auto& x : handles) {
-      status = db->DestroyColumnFamilyHandle(x);
+    for (auto& handle : handles) {
+      status = db->DestroyColumnFamilyHandle(handle);
       if (!status.ok()) throw std::runtime_error{"DestroyColumnFamily failed"};
     }
 
@@ -71,14 +72,18 @@ void make_inp_BD(const std::string& directory) {
   }
 }
 
-My_BD::My_BD(std::string& input_dir,
-             std::string& output_dir,
-             size_t number_of_threads)
-    : ProdQueue_(),
-      ConsQueue_(),
-      input_(input_dir),
-      output_(output_dir),
-      pool_(number_of_threads) {
+std::string Get_hash(const std::string& key, const std::string& value) {
+    return picosha2::hash256_hex_string(std::string(key + value));
+}
+
+Database::Database(std::string& input_dir,
+                   std::string& output_dir,
+                   size_t number_of_threads)
+    : _prod_queue(),
+      _cons_queue(),
+      _input(input_dir),
+      _output(output_dir),
+      _pool(number_of_threads) {
   //STATUS-
   // Значения этого типа возвращаются большинством функций
   // в RocksDB, которые могут столкнуться с ошибкой
@@ -91,7 +96,7 @@ My_BD::My_BD(std::string& input_dir,
     //List Column Families  - это статическая функция,
     //которая возвращает список всех семейств столбцов,
     //присутствующих в данный момент в базе данных.
-    s = rocksdb::DB::ListColumnFamilies(rocksdb::DBOptions(), input_, &names);
+    s = rocksdb::DB::ListColumnFamilies(rocksdb::DBOptions(), _input, &names);
     if (!s.ok()) throw std::runtime_error("ListColumnFamilies is failed");
 
     //выделяем место в векторе под names
@@ -107,8 +112,8 @@ My_BD::My_BD(std::string& input_dir,
     // только для чтения не нужно указывать все семейства столбцов -
     // можно открыть только подмножество семейств столбцов.
 
-    s = rocksdb::DB::OpenForReadOnly(rocksdb::DBOptions(), input_, desc,
-                                     &fromHandles_, &inpBD_);
+    s = rocksdb::DB::OpenForReadOnly(rocksdb::DBOptions(), _input, desc,
+                                     &_inp_handles, &_input_DB);
     if (!s.ok())
       throw std::runtime_error("OpenForReadOnly of input DB is failed");
     //очищаем вектор с именами (строки)
@@ -119,16 +124,16 @@ My_BD::My_BD(std::string& input_dir,
     //проверяем создана ли БД
     options.create_if_missing = true;
     //открываем БД на запись
-    s = rocksdb::DB::Open(options, output_, &outputBD_);
+    s = rocksdb::DB::Open(options, _output, &_output_DB);
     if (!s.ok()) throw std::runtime_error("Open of output DB is failed");
     //--создаём семецства столбцов--
     //CreateColumnFamilies - создает семейство столбцов,
     //указанное с names, и возвращает
-    // ColumnFamilyHandle через аргумент outHandles_.
-    outputBD_->CreateColumnFamilies(rocksdb::ColumnFamilyOptions(), names,
-                                    &outHandles_);
+    // ColumnFamilyHandle через аргумент _out_handles.
+    _output_DB->CreateColumnFamilies(rocksdb::ColumnFamilyOptions(), names,
+                                     &_out_handles);
 
-    outHandles_.insert(outHandles_.begin(), outputBD_->DefaultColumnFamily());
+    _out_handles.insert(_out_handles.begin(), _output_DB->DefaultColumnFamily());
   } catch (std::exception& e) {
     BOOST_LOG_TRIVIAL(error) << e.what();
   }
@@ -136,71 +141,71 @@ My_BD::My_BD(std::string& input_dir,
 }
 
 //парсим исходные данные в первоначальной БД
-void My_BD::parse_inp_BD() {
+void Database::parse_input_db() {
   std::vector<rocksdb::Iterator*> iterators;
   rocksdb::Iterator* it;
   //устанавливаем итератор на исходную БД
-  for (size_t i = 0; i < fromHandles_.size(); ++i) {
-    it = inpBD_->NewIterator(rocksdb::ReadOptions(), fromHandles_[i]);
+  for (size_t i = 0; i < _inp_handles.size(); ++i) {
+    it = _input_DB->NewIterator(rocksdb::ReadOptions(), _inp_handles[i]);
     for (it->SeekToFirst(); it->Valid(); it->Next()) {
       //ставим в очередь пары ключ-значение - очередь продюсера
-      ProdQueue_.push({i, it->key().ToString(), it->value().ToString()});
+      _prod_queue.push({i, it->key().ToString(), it->value().ToString()});
     }
     iterators.emplace_back(it);
     it = nullptr;
   }
 
-  for (auto& x : iterators) {
-    delete x;
+  for (auto& iterator : iterators) {
+    delete iterator;
   }
 
-  ParseFlag_ = true;
+    _parse_flag = true;
 }
 
 //деструктор - закрываем начальную БД
-My_BD::~My_BD() {
+Database::~Database() {
   try {
     //Перед удалением базы данных нужно закрыть
     //все семейства столбцов,
     //вызвав DestroyColumnFamilyHandle() со всеми дескрипторами.
     rocksdb::Status s;
-    if (!fromHandles_.empty() && inpBD_ != nullptr) {
-      for (auto& x : fromHandles_) {
-        s = inpBD_->DestroyColumnFamilyHandle(x);
+    if (!_inp_handles.empty() && _input_DB != nullptr) {
+      for (auto& x : _inp_handles) {
+        s = _input_DB->DestroyColumnFamilyHandle(x);
         if (!s.ok()) {
-          throw std::runtime_error("Destroy From Handle failed in destructor");
+          throw std::runtime_error("Destroy From handle failed in destructor");
         }
       }
-      fromHandles_.clear();
-      s = inpBD_->Close();
+      _inp_handles.clear();
+      s = _input_DB->Close();
       if (!s.ok()) {
         throw std::runtime_error("Closing of fromDB in destructor");
       }
-      delete inpBD_;
+      delete _input_DB;
     }
 
-    if (!outHandles_.empty() && outputBD_ != nullptr) {
-      for (auto& x : outHandles_) {
-        s = outputBD_->DestroyColumnFamilyHandle(x);
+    if (!_out_handles.empty() && _output_DB != nullptr) {
+      for (auto& x : _out_handles) {
+        s = _output_DB->DestroyColumnFamilyHandle(x);
         if (!s.ok()) {
           throw std::runtime_error(
-              "Destroy Output Handle failed in destructor");
+              "Destroy Output handle failed in destructor");
         }
       }
-      outHandles_.clear();
+      _out_handles.clear();
     }
   } catch (std::exception& e) {
     BOOST_LOG_TRIVIAL(error) << e.what();
   }
 }
 //запись хешированных данных в новую БД
-void My_BD::write_val_to_BD(Entry &&Key_Hash) {
+void Database::write_val_to_db(Input &&KeyHash) {
   try {
-    rocksdb::Status s = outputBD_->Put(rocksdb::WriteOptions(),
-                                       outHandles_[Key_Hash.Handle],
-                                       Key_Hash.Key, Key_Hash.Value);
+    rocksdb::Status s = _output_DB->Put(rocksdb::WriteOptions(),
+                                        _out_handles[KeyHash.handle],
+                                        KeyHash.key, KeyHash.value);
     BOOST_LOG_TRIVIAL(info)
-        <<"[" << Key_Hash.Key << "] " << " [" << Key_Hash.Value << "] "
+        << "[" << KeyHash.key << "] " << " [" << KeyHash.value << "] "
         << " [-NEW DATA BASE-]";
     if (!s.ok()) {
       throw std::runtime_error("Writing in output DB is failed");
@@ -209,51 +214,48 @@ void My_BD::write_val_to_BD(Entry &&Key_Hash) {
     BOOST_LOG_TRIVIAL(error) << e.what();
   }
 }
-//-----------вычисляем хеш--------------------------------------------
-std::string calc_hash(const std::string& key, const std::string& value) {
-  return picosha2::hash256_hex_string(std::string(key + value));
-}
+
 //----------ставим в очередь консьюмера новые пары  для новой БД------
-void My_BD::make_cons_queue(Entry& en) {
-  ConsQueue_.push({en.Handle, en.Key, calc_hash(en.Key, en.Value)});
+void Database::make_cons_queue(Input& input) {
+  _cons_queue.push({input.handle, input.key, Get_hash(input.key, input.value)});
 }
 //--------------------------------------------------------------------
 //задаём пул потоков консьюмера
-void My_BD::make_cons_pool() {
-  Entry item;
+void Database::make_cons_pool() {
+  Input item;
   //пока есть задачи в очереди продюсера
-  while (!ParseFlag_ || !ProdQueue_.empty()) {
-    if (ProdQueue_.pop(item)) {
+  while (!_parse_flag || !_prod_queue.empty()) {
+    if (_prod_queue.pop(item)) {
       //в пуле потоков вычисляем хеши и формируем очереь на запись
-      pool_.enqueue([this](Entry x) { make_cons_queue(x); }, item);
+      _pool.enqueue([this](Input x) { make_cons_queue(x); }, item);
     }
   }
-  HashFlag_ = true;
+    _hash_flag = true;
 }
 //------------------------------------------------------------------
 //------записываем всю очередь в новую БД---------------------------
-void My_BD::write_new_BD() {
-  Entry item;
+void Database::write_new_db() {
+  Input item;
   //пока есть задачи в очереди консьюмера
-  while (!ConsQueue_.empty() || !HashFlag_) {
-    if (ConsQueue_.pop(item)) {
+  while (!_cons_queue.empty() || !_hash_flag) {
+    if (_cons_queue.pop(item)) {
       //записываем их в новую БД
-      write_val_to_BD(std::move(item));
+        write_val_to_db(std::move(item));
     }
   }
-  WriteFlag_ = true;
+    _write_flag = true;
 }
 //-------запускаем потоки и выполняем парсинг и запись---------------
-void My_BD::start_process() {
-  std::thread producer([this]() { parse_inp_BD(); });
+void Database::start_process() {
+  std::thread producer([this]() { parse_input_db(); });
 
-  std::thread consumer([this]() { write_new_BD(); });
+  std::thread consumer([this]() { write_new_db(); });
 
   producer.join();
   make_cons_pool();
   consumer.join();
   //если какой-то из флагов не выставлен - ждём
-  while (!HashFlag_ || !ParseFlag_ || !WriteFlag_) {
+  while (!_hash_flag || !_parse_flag || !_write_flag) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   }
 }
